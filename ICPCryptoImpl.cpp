@@ -1,6 +1,5 @@
 #include "stdafx.h"
 # include <afx.h>
-#include "ICPCryptoImpl.h"
 #include <shlwapi.h>
 // #include "Yar\ini.h"
 
@@ -16,6 +15,7 @@
 
 #include <WinCrypt.h>
 #pragma comment(lib,"Crypt32.lib")
+#include "ICPCryptoImpl.h"
 
 #ifdef _DEBUG
 	#undef THIS_FILE

@@ -1,8 +1,12 @@
 #include "stdafx.h"
 # include <afx.h>
 #include "zend_config.w32.h" 
+
+// Важно!!! 
+// В файле config.w32.h (в директории php) необходимо закомментировать строку: #define _USE_32BIT_TIME_T
+
 #include <php.h>
-// #include "ICPCryptoImpl.h"
+#include <WinCrypt.h>
 #include "PHPCrypto.h"
 
 ZEND_FUNCTION(DoubleUp);

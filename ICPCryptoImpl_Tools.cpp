@@ -1,4 +1,8 @@
 #include "stdafx.h"
+
+#include <WinCrypt.h>
+#pragma comment(lib,"Crypt32.lib")
+
 #include "ICPCryptoImpl.h"
 
 #pragma warning( disable : 4018 )

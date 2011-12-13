@@ -9,7 +9,6 @@
 
 #include <vector>
 #include <afxtempl.h>
-// #include "ICPCrypto.h"
 #include "LogFile.h"
 #include "BinData.h"
 #include "StringArrayEx.h"
@@ -18,29 +17,10 @@
 #include "IniMng.h"
 
 // My additionals
-// class ICPCrypto {};
 #define CCPC_NoError 0
 #define ICPCryptoCallBack void
 #define KILL_STREAM_INTERFACE
-/*
-#define STR_TAG_CERT		_T("Certificate")
-#define STR_TAG_ALL			_T("All")
-#define STR_TAG_THUMB		_T("Thumb")
-#define STR_TAG_OID			_T("OID")
-#define STR_TAG_COMMON_NAME	_T("CommonName")
-#define STR_TAG_DT_SIGN		_T("DateTimeSign")
-#define STR_TAG_CERT_NOT_BEFORE_TIME	_T("NotBeforeTimeXml")
-#define STR_TAG_CERT_NOT_BEFORE_LTIME	_T("NotBeforeTimeLong")
-#define STR_TAG_CERT_NOT_AFTER_TIME		_T("NotAfterTimeXml")
-#define STR_TAG_CERT_NOT_AFTER_LTIME	_T("NotAfterTimeLong")
-#define STR_TAG_SERIAL_NUMBER			_T("SerialNumber")
-#define STR_TAG_CERT_VERSION			_T("Version")
-#define STR_TAG_CERT_ENCODING			_T("Encoding")
-#define STR_TAG_SIGN_ALG				_T("SignatureAlgorithm")
-#define STR_TAG_ISSUER					_T("Issuer")
-#define STR_TAG_SUBJECT					_T("Subject")
-#define STR_TAG_EXTENSION				_T("Extension")
-*/
+
 class 	CERTFINDPARAM 
 {
 public:

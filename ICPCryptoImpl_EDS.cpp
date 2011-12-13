@@ -1,5 +1,10 @@
 #include "stdafx.h"
+
+#include <WinCrypt.h>
+#pragma comment(lib,"Crypt32.lib")
+
 #include "ICPCryptoImpl.h"
+
 #ifndef KILL_STREAM_INTERFACE
 // #include "../../../lib_for_sprinter/Soft/UnifiedFormat/Common/UniqueFileNameGenerator.h"
 #include <fstream>
