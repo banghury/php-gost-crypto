@@ -18,13 +18,17 @@ BOOL CPhpCrypto::SignFile	(const CString& sPFSrc, const CString& sPFDst, const C
 		CString sError;
 		if (bSignDetached)
 		{
-			if (CCPC_NoError != cpImpl.SignFileD (sIDCert, sPFSrc, sPFDst))
+			cpImpl.m_LastErrorCode = cpImpl.SignFileD (sIDCert, sPFSrc, sPFDst);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
 				sError = cpImpl.GetLastCryptoError ();
 		}	else	{
 			if (!CopyFile (sPFSrc, sPFDst, FALSE))
 				sError = (CString)"Can't copy file from " + sPFSrc + " to " + sPFDst;
-			else if (CCPC_NoError != cpImpl.SignFileA (sIDCert, sPFDst))
-				sError = cpImpl.GetLastCryptoError ();
+			else {
+				cpImpl.m_LastErrorCode = cpImpl.SignFileA (sIDCert, sPFDst);
+				if (CCPC_NoError != cpImpl.m_LastErrorCode)
+					sError = cpImpl.GetLastCryptoError ();
+			}
 		}
 
 		if (!sError.IsEmpty ())
@@ -35,14 +39,10 @@ BOOL CPhpCrypto::SignFile	(const CString& sPFSrc, const CString& sPFDst, const C
 		cpImpl.WriteToLog(_T("Подпись успешно создана и сохранена в \"%s\""), CFileMng::GetFileName (sPFDst));
 		return TRUE;
 	} 
-	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"SignFile error: " + sThrow;
-	}
-	catch (...)
-	{
-		m_sLastError = (CString)"SignFile error: Unknown";
-	}
+	catch (CString sThrow)	
+	{		m_sLastError = (CString)"SignFile error: " + sThrow;	}
+	catch (...)	
+	{		m_sLastError = (CString)"SignFile error: Unknown";		}
 	return FALSE;
 }
 
@@ -58,12 +58,14 @@ BOOL CPhpCrypto::VerifyFile	(const CString& sPFSrc, const CString& sPFSign, CStr
 // write sign for verify
 		if (sPFSign != "")
 		{
-// Verify data as detached sign			
-			if (CCPC_NoError != cpImpl.CheckFileD (sPFSrc, sPFSign, sSignInfoRet))
+// Verify data as detached sign	
+			cpImpl.m_LastErrorCode = cpImpl.CheckFileD (sPFSrc, sPFSign, sSignInfoRet);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
 				sError = cpImpl.GetLastCryptoError ();
 		}	else	{
 // Verify data as attached sign
-			if (CCPC_NoError != cpImpl.CheckFileA (sPFSrc, sSignInfoRet))
+			cpImpl.m_LastErrorCode = cpImpl.CheckFileA (sPFSrc, sSignInfoRet);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
 				sError = cpImpl.GetLastCryptoError ();
 		}
 		if (!sError.IsEmpty ())
@@ -88,38 +90,36 @@ BOOL CPhpCrypto::VerifyFile	(const CString& sPFSrc, const CString& sPFSign, CStr
 
 BOOL CPhpCrypto::EncryptFile(const CString& sPFSrc, const CString& sPFDst, const CString& sArrIDCerts)
 {
+	ICPCryptoImpl cpImpl;
 	try {
 		CStringArrayEx saIDCerts (sArrIDCerts, ',');
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Шифрование файла \"%s\""), CFileMng::GetFileName (sPFSrc));
 
-		if (CCPC_NoError != cpImpl.EncryptFile (sPFSrc, sPFDst, saIDCerts))
-		{
-			cpImpl.WriteToLog(_T("Ошибка шифрования файла \"%s\" : %s"), CFileMng::GetFileName (sPFSrc), cpImpl.GetLastCryptoError ());
+		if (!CFileMng::IsFileExist (sPFSrc))
+			throw (CString)"Не найден файл: " + sPFSrc;
+
+		cpImpl.m_LastErrorCode = cpImpl.EncryptFile (sPFSrc, sPFDst, saIDCerts);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
 			throw cpImpl.GetLastCryptoError ();
-		}
 		
 		cpImpl.WriteToLog(_T("Файл успешно зашифрован и сохранен в \"%s\""), CFileMng::GetFileName (sPFDst));
 		return TRUE;
 	} 
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"EncryptFile error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"EncryptFile error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"EncryptFile error: Unknown";
-	}
+	{		m_sLastError = (CString)"EncryptFile error: Unknown";	}
+	cpImpl.WriteToLog(_T("Ошибка шифрования файла \"%s\" : %s"), CFileMng::GetFileName (sPFSrc), m_sLastError);
 	return FALSE;
 }
 
 BOOL CPhpCrypto::EncryptFileByCertContent (const CString& sPFSrc, const CString& sPFDst, const CString& sArrIDCertsContent)
 {
 	CArray<PCCERT_CONTEXT,PCCERT_CONTEXT> arrCertRcpt;
+	ICPCryptoImpl cpImpl;
 
 	try {
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Шифрование файла \"%s\" контентом сертификатов"), CFileMng::GetFileName (sPFSrc));
 
@@ -127,35 +127,32 @@ BOOL CPhpCrypto::EncryptFileByCertContent (const CString& sPFSrc, const CString&
 		CStringArrayEx saCertsContent (sArrIDCertsContent, ',');
 		std::list<CBinData> lsBNDataCert;
 		CStringArrayEx saTemp;
-		try {
-			FOR_ALL_CONST_STR (pStrCertContent, saCertsContent)
-			{
-				lsBNDataCert.push_front (CBinData());
-				if (!CBase64Utils::DecodeFromB64 (*pStrCertContent, lsBNDataCert.front()))
-					throw CString ("Certificate content data is not Base64!");
-
-				if (CCPC_NoError != cpImpl.CryptDataBlobFromFile ("", NULL, &(lsBNDataCert.front()) ))
-					throw cpImpl.GetLastCryptoError ();
-		// Преобразуем сертификат в описатель
-				PCCERT_CONTEXT pCertContext = ::CertCreateCertificateContext (X509_ASN_ENCODING|PKCS_7_ASN_ENCODING,
-					lsBNDataCert.front().BufUC(), lsBNDataCert.front().Size());
-				
-				if (pCertContext == NULL)
-					throw (CString)"Failed to create the handle of the certificate binary data : " + CStringProc::GetSystemError();
-
-				saTemp.Add (cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Subject));
-				arrCertRcpt.Add(pCertContext);
-			}
-	//		sB64DataEncRet = saTemp.GetAsString ("\r\n");
-	//		return TRUE;
-
-			if (CCPC_NoError != cpImpl.EncryptFileEx (sPFSrc, sPFDst, CStringArray (), &arrCertRcpt))
-				throw cpImpl.GetLastCryptoError ();
-		} catch (CString sError)
+		FOR_ALL_CONST_STR (pStrCertContent, saCertsContent)
 		{
-			cpImpl.WriteToLog(_T("Ошибка шифрование файла \"%s\" контентом сертификатов : %s"), CFileMng::GetFileName (sPFSrc), sError);
-			throw sError;
+			lsBNDataCert.push_front (CBinData());
+			if (!CBase64Utils::DecodeFromB64 (*pStrCertContent, lsBNDataCert.front()))
+				throw CString ("Certificate content data is not Base64!");
+
+			cpImpl.m_LastErrorCode = cpImpl.CryptDataBlobFromFile ("", NULL, &(lsBNDataCert.front()) );
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
+				throw cpImpl.GetLastCryptoError ();
+// Преобразуем сертификат в описатель
+			PCCERT_CONTEXT pCertContext = ::CertCreateCertificateContext (X509_ASN_ENCODING|PKCS_7_ASN_ENCODING,
+				lsBNDataCert.front().BufUC(), lsBNDataCert.front().Size());
+			
+			if (pCertContext == NULL)
+				throw (CString)"Failed to create the handle of the certificate binary data : " + CStringProc::GetSystemError();
+
+			saTemp.Add (cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Subject));
+			arrCertRcpt.Add(pCertContext);
 		}
+//		sB64DataEncRet = saTemp.GetAsString ("\r\n");
+//		return TRUE;
+
+		cpImpl.m_LastErrorCode = cpImpl.EncryptFileEx (sPFSrc, sPFDst, CStringArray (), &arrCertRcpt);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
+			throw cpImpl.GetLastCryptoError ();
+
 		cpImpl.WriteToLog(_T("Файл успешно зашифрован контентом сертификатов и сохранен в \"%s\""), CFileMng::GetFileName (sPFDst));
 		ICPCryptoImpl::FreeCertsArray (arrCertRcpt);
 		return TRUE;
@@ -168,6 +165,7 @@ BOOL CPhpCrypto::EncryptFileByCertContent (const CString& sPFSrc, const CString&
 	{
 		m_sLastError = (CString)"EncryptDataB64ByCertContent error: Unknown";
 	}
+	cpImpl.WriteToLog(_T("Ошибка шифрование файла \"%s\" контентом сертификатов : %s"), CFileMng::GetFileName (sPFSrc), m_sLastError);
 
 	ICPCryptoImpl::FreeCertsArray (arrCertRcpt);
 	return FALSE;
@@ -175,28 +173,27 @@ BOOL CPhpCrypto::EncryptFileByCertContent (const CString& sPFSrc, const CString&
 
 BOOL CPhpCrypto::DecryptFile(const CString& sPFSrc, const CString& sPFDst)
 {
+	ICPCryptoImpl cpImpl;
 	try {
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Расшифровка файла \"%s\""), CFileMng::GetFileName (sPFSrc));
+		
+		if (!CFileMng::IsFileExist (sPFSrc))
+			throw (CString)"Не найден файл: " + sPFSrc;
 
-		if (CCPC_NoError != cpImpl.DecryptFile (sPFSrc, sPFDst))
-		{
-			cpImpl.WriteToLog(_T("Ошибка расшифровки файла \"%s\" : %s"), CFileMng::GetFileName (sPFSrc), cpImpl.GetLastCryptoError ());
+		cpImpl.m_LastErrorCode = cpImpl.DecryptFile (sPFSrc, sPFDst);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
 			throw cpImpl.GetLastCryptoError ();
-		}
 		
 		cpImpl.WriteToLog(_T("Файл успешно расшифрован и сохранен в \"%s\""), CFileMng::GetFileName (sPFDst));
 		return TRUE;
 	} 
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"DecryptFile error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"DecryptFile error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"DecryptFile error: Unknown";
-	}
+	{		m_sLastError = (CString)"DecryptFile error: Unknown";	}
+	
+	cpImpl.WriteToLog(_T("Ошибка расшифровки файла \"%s\" : %s"), CFileMng::GetFileName (sPFSrc), m_sLastError);
 	return FALSE;
 }
 
@@ -229,8 +226,10 @@ BOOL CPhpCrypto::GetCertProperty (PCCERT_CONTEXT pCertContext, DWORD dwParam, CB
 
 		return TRUE;
 	} 
-	catch (CString sThrow)	{		m_sLastError = (CString)"GetCertProperty : " + sThrow;	}
-	catch (...)				{		m_sLastError = (CString)"GetCertProperty : Unknown";	}
+	catch (CString sThrow)	
+	{		m_sLastError = (CString)"GetCertProperty : " + sThrow;	}
+	catch (...)				
+	{		m_sLastError = (CString)"GetCertProperty : Unknown";	}
 	return FALSE;
 }
 
@@ -278,23 +277,22 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 {
 	sXmlCertRet = "<?xml version=\"1.0\" encoding=\"windows-1251\"?>\r\n<Certificate>\r\n";
 	PCCERT_CONTEXT pCertContext = NULL;
+	ICPCryptoImpl cpImpl;
 	try {
+		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
+		cpImpl.WriteToLog(_T("Парсинг контента сертификата."));
+
 		CBinData bnDataCert;
 		if (!CBase64Utils::DecodeFromB64 (sB64DataCert, bnDataCert))
 			throw CString ("Certificate content data is not Base64!");
 
 		BOOL bTypeIsASN = bnDataCert.Find (_T("MII")) == 0;
+		cpImpl.m_LastErrorCode = cpImpl.CryptDataBlobFromFile ("", NULL, &bnDataCert);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
+			throw cpImpl.GetLastCryptoError ();
 
-		ICPCryptoImpl cpImpl;
-		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
-		cpImpl.WriteToLog(_T("Парсинг контента сертификата."));
-		CString sCertThumb;
-		try 
-		{
-			if (CCPC_NoError != cpImpl.CryptDataBlobFromFile ("", NULL, &bnDataCert))
-				throw cpImpl.GetLastCryptoError ();
-			CStringProc::SetStrForTag (sXmlCertRet, "Type", bTypeIsASN ? "ASN" : "DER");
-			sXmlCertRet += "\r\n";
+		CStringProc::SetStrForTag (sXmlCertRet, "Type", bTypeIsASN ? "ASN" : "DER");
+		sXmlCertRet += "\r\n";
 /*
 		DWORD                       dwVersion;
 		CRYPT_ALGORITHM_IDENTIFIER  SignatureAlgorithm;
@@ -313,139 +311,140 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 */
 
 // Преобразуем сертификат в описатель
-			PCCERT_CONTEXT pCertContext = ::CertCreateCertificateContext (X509_ASN_ENCODING|PKCS_7_ASN_ENCODING,
-				bnDataCert.BufUC(), bnDataCert.Size());
-			if (pCertContext == NULL)
-				throw (CString)"Failed to create the handle of the certificate binary data : " + CStringProc::GetSystemError();
+		PCCERT_CONTEXT pCertContext = ::CertCreateCertificateContext (X509_ASN_ENCODING|PKCS_7_ASN_ENCODING,
+			bnDataCert.BufUC(), bnDataCert.Size());
+		if (pCertContext == NULL)
+			throw (CString)"Failed to create the handle of the certificate binary data : " + CStringProc::GetSystemError();
 // Subject
-			{
-				CString strSubject = cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Subject);
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_SUBJECT, strSubject);
-				sXmlCertRet += "\r\n";
-			}
+		{
+			CString strSubject = cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Subject);
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_SUBJECT, strSubject);
+			sXmlCertRet += "\r\n";
+		}
 	
 // Issuer
-			{
-				CString strIssuer = cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Issuer);
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_ISSUER, strIssuer);
-				sXmlCertRet += "\r\n";
-			}
+		{
+			CString strIssuer = cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Issuer);
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_ISSUER, strIssuer);
+			sXmlCertRet += "\r\n";
+		}
 
 // Thumb
-			CBinData bnThumb;
-			if (GetCertProperty (pCertContext, CERT_SHA1_HASH_PROP_ID, bnThumb))
-			{
-				CString sHex;
-				bnThumb.Encode2Hex (sHex);
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_THUMB, sHex);
-				sCertThumb = sHex;
-			}
-			sXmlCertRet += "\r\n";
-		
+		CString sCertThumb;
+		CBinData bnThumb;
+		if (GetCertProperty (pCertContext, CERT_SHA1_HASH_PROP_ID, bnThumb))
+		{
+			CString sHex;
+			bnThumb.Encode2Hex (sHex);
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_THUMB, sHex);
+			sCertThumb = sHex;
+		}
+		sXmlCertRet += "\r\n";
+	
 // Datetime
-			CTime tmNotBefore (pCertContext->pCertInfo->NotBefore);
-			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_BEFORE_TIME, tmNotBefore.Format( "%Y-%m-%dT%H:%M:%S"));
-			CString sTMLong;
-			sTMLong.Format ("%u", tmNotBefore);
-			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_BEFORE_LTIME, sTMLong);
-			sXmlCertRet += "\r\n";
+		CTime tmNotBefore (pCertContext->pCertInfo->NotBefore);
+		CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_BEFORE_TIME, tmNotBefore.Format( "%Y-%m-%dT%H:%M:%S"));
+		CString sTMLong;
+		sTMLong.Format ("%u", tmNotBefore);
+		CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_BEFORE_LTIME, sTMLong);
+		sXmlCertRet += "\r\n";
 
-			CTime tmNotAfter (pCertContext->pCertInfo->NotAfter);
-			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_AFTER_TIME, tmNotAfter.Format( "%Y-%m-%dT%H:%M:%S"));
-			sTMLong.Format ("%u", tmNotAfter);
-			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_AFTER_LTIME, sTMLong);
-			sXmlCertRet += "\r\n";
+		CTime tmNotAfter (pCertContext->pCertInfo->NotAfter);
+		CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_AFTER_TIME, tmNotAfter.Format( "%Y-%m-%dT%H:%M:%S"));
+		sTMLong.Format ("%u", tmNotAfter);
+		CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_NOT_AFTER_LTIME, sTMLong);
+		sXmlCertRet += "\r\n";
 
 // Serial number
-			if (pCertContext->pCertInfo->SerialNumber.pbData && pCertContext->pCertInfo->SerialNumber.cbData)
+		if (pCertContext->pCertInfo->SerialNumber.pbData && pCertContext->pCertInfo->SerialNumber.cbData)
+		{
+			CBinData bnSerial (pCertContext->pCertInfo->SerialNumber.pbData, pCertContext->pCertInfo->SerialNumber.cbData);
+			// Invert Data
+			for (int i = 0; i < bnSerial.Size () / 2; i++)
 			{
-				CBinData bnSerial (pCertContext->pCertInfo->SerialNumber.pbData, pCertContext->pCertInfo->SerialNumber.cbData);
-				// Invert Data
-				for (int i = 0; i < bnSerial.Size () / 2; i++)
-				{
-					UCHAR ucSwap = *(bnSerial.BufUC () + i);
-					*(bnSerial.BufUC () + i) = *(bnSerial.BufUC () + bnSerial.Size () - i - 1);
-					*(bnSerial.BufUC () + bnSerial.Size () - i - 1) = ucSwap;
-				}
-				CString sHex;
-				bnSerial.Encode2Hex (sHex);
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_SERIAL_NUMBER, sHex);
-				sXmlCertRet += "\r\n";
-			}	
+				UCHAR ucSwap = *(bnSerial.BufUC () + i);
+				*(bnSerial.BufUC () + i) = *(bnSerial.BufUC () + bnSerial.Size () - i - 1);
+				*(bnSerial.BufUC () + bnSerial.Size () - i - 1) = ucSwap;
+			}
+			CString sHex;
+			bnSerial.Encode2Hex (sHex);
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_SERIAL_NUMBER, sHex);
+			sXmlCertRet += "\r\n";
+		}	
 
 // Version
-			{
-				CString sVersion;
-				sVersion.Format ("V%u", pCertContext->pCertInfo->dwVersion + 1);
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_VERSION, sVersion);
-				sXmlCertRet += "\r\n";
-			}
+		{
+			CString sVersion;
+			sVersion.Format ("V%u", pCertContext->pCertInfo->dwVersion + 1);
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_VERSION, sVersion);
+			sXmlCertRet += "\r\n";
+		}
 
 // dwCertEncodingType
-			{
-				CString sTemp;
-				sTemp.Format ("%u", pCertContext->dwCertEncodingType) ;
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_ENCODING, sTemp);
-				sXmlCertRet += "\r\n";
-			}
+		{
+			CString sTemp;
+			sTemp.Format ("%u", pCertContext->dwCertEncodingType) ;
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_CERT_ENCODING, sTemp);
+			sXmlCertRet += "\r\n";
+		}
 
 // SignatureAlgorithm
+		{
+			CString sSignAlg = pCertContext->pCertInfo->SignatureAlgorithm.pszObjId;
+			// 2011/09/05 Check that Parameter-data-size is greater than 0.         
+			if (pCertContext->pCertInfo->SignatureAlgorithm.Parameters.cbData > 0) 
 			{
-				CString sSignAlg = pCertContext->pCertInfo->SignatureAlgorithm.pszObjId;
-				// 2011/09/05 Check that Parameter-data-size is greater than 0.         
-				if (pCertContext->pCertInfo->SignatureAlgorithm.Parameters.cbData > 0) 
-				{
-					CBinData bnSignParam (pCertContext->pCertInfo->SignatureAlgorithm.Parameters.pbData,
-						pCertContext->pCertInfo->SignatureAlgorithm.Parameters.cbData);
-					CString sHex;
-					bnSignParam.Encode2Hex (sHex);
-					CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_SIGN_ALG, sSignAlg + "=" + sHex);
-					sXmlCertRet += "\r\n";
-				}
-			}
-
-// rgExtension
-			{
-				BYTE* pbDecoded;            // result
-				DWORD cbDecoded;    // result length
-				DWORD ExtCount = pCertContext->pCertInfo->cExtension;
-				CString sCertExt;
-				for (int i = 0; i < ExtCount; i++) // перебор все расширений сертификата
-				{
-					 // Get length needed to buffer;
-					if (!CryptDecodeObject(
-							pCertContext->dwCertEncodingType,
-							pCertContext->pCertInfo->rgExtension[i].pszObjId,
-							pCertContext->pCertInfo->rgExtension[i].Value.pbData,
-							pCertContext->pCertInfo->rgExtension[i].Value.cbData,
-							NULL,
-							NULL,
-							&cbDecoded) || cbDecoded == 0)
-						continue;
-					CBinData bnExt (cbDecoded);
-					// Call again to
-					if (!CryptDecodeObject(
-							pCertContext->dwCertEncodingType,
-							pCertContext->pCertInfo->rgExtension[i].pszObjId,
-							pCertContext->pCertInfo->rgExtension[i].Value.pbData,
-							pCertContext->pCertInfo->rgExtension[i].Value.cbData,
-							NULL,
-							bnExt.Buf (),
-							&cbDecoded))
-						continue;
-					
-					CString sTemp;
-					sTemp.Format ("%s", pCertContext->pCertInfo->rgExtension[i].pszObjId);
-					sCertExt += sTemp;
-					bnExt.Encode2Hex (sTemp); 
-					if (sTemp != "")
-						sCertExt += (CString)'=' + sTemp;
-					sCertExt += " ";
-				}
-				sCertExt.TrimRight ();
-				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_EXTENSION, sCertExt);
+				CBinData bnSignParam (pCertContext->pCertInfo->SignatureAlgorithm.Parameters.pbData,
+					pCertContext->pCertInfo->SignatureAlgorithm.Parameters.cbData);
+				CString sHex;
+				bnSignParam.Encode2Hex (sHex);
+				CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_SIGN_ALG, sSignAlg + "=" + sHex);
 				sXmlCertRet += "\r\n";
 			}
+		}
+
+// rgExtension
+		{
+			BYTE* pbDecoded;            // result
+			DWORD cbDecoded;    // result length
+			DWORD ExtCount = pCertContext->pCertInfo->cExtension;
+			CString sCertExt;
+			for (int i = 0; i < ExtCount; i++) // перебор все расширений сертификата
+			{
+				 // Get length needed to buffer;
+				if (!CryptDecodeObject(
+						pCertContext->dwCertEncodingType,
+						pCertContext->pCertInfo->rgExtension[i].pszObjId,
+						pCertContext->pCertInfo->rgExtension[i].Value.pbData,
+						pCertContext->pCertInfo->rgExtension[i].Value.cbData,
+						NULL,
+						NULL,
+						&cbDecoded) || cbDecoded == 0)
+					continue;
+				CBinData bnExt (cbDecoded);
+				// Call again to
+				if (!CryptDecodeObject(
+						pCertContext->dwCertEncodingType,
+						pCertContext->pCertInfo->rgExtension[i].pszObjId,
+						pCertContext->pCertInfo->rgExtension[i].Value.pbData,
+						pCertContext->pCertInfo->rgExtension[i].Value.cbData,
+						NULL,
+						bnExt.Buf (),
+						&cbDecoded))
+					continue;
+				
+				CString sTemp;
+				sTemp.Format ("%s", pCertContext->pCertInfo->rgExtension[i].pszObjId);
+				sCertExt += sTemp;
+				bnExt.Encode2Hex (sTemp); 
+				if (sTemp != "")
+					sCertExt += (CString)'=' + sTemp;
+				sCertExt += " ";
+			}
+			sCertExt.TrimRight ();
+			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_EXTENSION, sCertExt);
+			sXmlCertRet += "\r\n";
+		}
 /*
 		CERT_PUBLIC_KEY_INFO        SubjectPublicKeyInfo;
 		CRYPT_BIT_BLOB              IssuerUniqueId;
@@ -453,26 +452,21 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 		DWORD                       cExtension;
 		PCERT_EXTENSION             rgExtension;
 */
-			if (pCertContext)
-				::CertFreeCertificateContext (pCertContext);
+		if (pCertContext)
+			::CertFreeCertificateContext (pCertContext);
 
-			sXmlCertRet += "</Certificate>";
-			return TRUE;
-		}	catch (CString sError)
-		{
-			cpImpl.WriteToLog(_T("Ошибка парсинга контента сертификата : %s"), sError);
-			throw sError;
-		}
+		sXmlCertRet += "</Certificate>";
+		sXmlCertRet += "\r\n";
+//		ASSERT (FALSE);
 		cpImpl.WriteToLog(_T("Парсинг контента сертификата %s выполнен успешно"), sCertThumb);
+		return TRUE;
 	}
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"ParseCertificate error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"ParseCertificate error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"ParseCertificate error: Unknown";
-	}
+	{		m_sLastError = (CString)"ParseCertificate error: Unknown";	}
+
+	cpImpl.WriteToLog(_T("Ошибка парсинга контента сертификата : %s"), m_sLastError);
 
 	if (pCertContext)
 		::CertFreeCertificateContext (pCertContext);
@@ -484,6 +478,7 @@ BOOL CPhpCrypto::SignDataB64 (const CString& sB64Data, const CString& sIDCert, c
 {
 	sB64SignRet = "";
 	CString sPFSrc, sPFSign;
+	ICPCryptoImpl cpImpl;
 	try {
 		CString sDirTemp = CFileMng::GetDirTemp ();
 		if (sDirTemp.IsEmpty() || !CFileMng::IsDirExist (sDirTemp))
@@ -498,30 +493,26 @@ BOOL CPhpCrypto::SignDataB64 (const CString& sB64Data, const CString& sIDCert, c
 		if (!bnData.fWrite (sPFSrc))
 			throw CString ("Can't write data to temp dir: " + sDirTemp);
 
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Подпись данных сертификатом : %s"), sIDCert);
 
-		try {
-			if (bSignDetached)
-			{
-				if (CCPC_NoError != cpImpl.SignFileD (sIDCert, sPFSrc, sPFSign))
-					throw cpImpl.GetLastCryptoError ();
-			}	else	{
-				if (CCPC_NoError != cpImpl.SignFileA (sIDCert, sPFSrc))
-					throw cpImpl.GetLastCryptoError ();
-				sPFSign = sPFSrc;
-			}
-
-			CBinData bnSign;
-			if (!bnSign.fRead (sPFSign))
-				throw CString ("Can't read sign data in temp dir: " + sPFSign);
-			sB64SignRet = CBase64Utils::EncodeToB64 (bnSign);
-		}	catch (CString sError)
+		if (bSignDetached)
 		{
-			cpImpl.WriteToLog(_T("Ошибка подписи данных : %s"), sError);
-			throw sError;
+			cpImpl.m_LastErrorCode = cpImpl.SignFileD (sIDCert, sPFSrc, sPFSign);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
+				throw cpImpl.GetLastCryptoError ();
+		}	else	{
+			cpImpl.m_LastErrorCode = cpImpl.SignFileA (sIDCert, sPFSrc);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
+				throw cpImpl.GetLastCryptoError ();
+			sPFSign = sPFSrc;
 		}
+
+		CBinData bnSign;
+		if (!bnSign.fRead (sPFSign))
+			throw CString ("Can't read sign data in temp dir: " + sPFSign);
+		sB64SignRet = CBase64Utils::EncodeToB64 (bnSign);
+
 // SMU: Clean temp files
 		cpImpl.WriteToLog(_T("Данные успешно подписаны сертификатом : %s"), sIDCert);
 		CFileMng::DeleteFileA (sPFSrc);
@@ -536,6 +527,7 @@ BOOL CPhpCrypto::SignDataB64 (const CString& sB64Data, const CString& sIDCert, c
 	{
 		m_sLastError = (CString)"SignData error: Unknown";
 	}
+	cpImpl.WriteToLog(_T("Ошибка подписи данных : %s"), m_sLastError);
 
 	if (!sPFSrc.IsEmpty ())
 		CFileMng::DeleteFileA (sPFSrc);
@@ -549,6 +541,7 @@ BOOL CPhpCrypto::VerifyDataB64	(const CString & sB64Data, CString& sB64Sign, CSt
 {
 	sSignInfoRet = "";
 	CString sPFSrc, sPFSign;
+	ICPCryptoImpl cpImpl;
 	try {
 		CString sDirTemp = CFileMng::GetDirTemp ();
 		if (sDirTemp.IsEmpty() || !CFileMng::IsDirExist (sDirTemp))
@@ -564,31 +557,26 @@ BOOL CPhpCrypto::VerifyDataB64	(const CString & sB64Data, CString& sB64Sign, CSt
 		if (!bnData.fWrite (sPFSrc))
 			throw CString ("Can't write verify data to temp dir: " + sDirTemp);
 
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Проверка подписи данных."));
 
 // write sign for verify
-		try {
-			if (sB64Sign != "")
-			{
-				if (!CBase64Utils::DecodeFromB64 (sB64Sign, bnSign))
-					throw CString ("Data for verify sign is not Base64!");
-
-				if (!bnSign.fWrite (sPFSign))
-					throw CString ("Can't write verify sign to temp dir: " + sDirTemp);
-	// Verify data as detached sign			
-				if (CCPC_NoError != cpImpl.CheckFileD (sPFSrc, sPFSign, sSignInfoRet))
-					throw cpImpl.GetLastCryptoError ();
-			}	else	{
-	// Verify data as attached sign
-				if (CCPC_NoError != cpImpl.CheckFileA (sPFSrc, sSignInfoRet))
-					throw cpImpl.GetLastCryptoError ();
-			}
-		} catch (CString sError)
+		if (sB64Sign != "")
 		{
-			cpImpl.WriteToLog(_T("Ошибка проверки подписи данных : %s"), sError);
-			throw sError;
+			if (!CBase64Utils::DecodeFromB64 (sB64Sign, bnSign))
+				throw CString ("Data for verify sign is not Base64!");
+
+			if (!bnSign.fWrite (sPFSign))
+				throw CString ("Can't write verify sign to temp dir: " + sDirTemp);
+// Verify data as detached sign			
+			cpImpl.m_LastErrorCode = cpImpl.CheckFileD (sPFSrc, sPFSign, sSignInfoRet);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
+				throw cpImpl.GetLastCryptoError ();
+		}	else	{
+// Verify data as attached sign
+			cpImpl.m_LastErrorCode = cpImpl.CheckFileA (sPFSrc, sSignInfoRet);
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
+				throw cpImpl.GetLastCryptoError ();
 		}
 // SMU: Clean temp files
 		cpImpl.WriteToLog(_T("Успешно проверена подпись данных : %s"), sSignInfoRet);
@@ -597,13 +585,11 @@ BOOL CPhpCrypto::VerifyDataB64	(const CString & sB64Data, CString& sB64Sign, CSt
 		return TRUE;
 	} 
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"VerifyData error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"VerifyData error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"VerifyData error: Unknown";
-	}
+	{		m_sLastError = (CString)"VerifyData error: Unknown";	}
+
+	cpImpl.WriteToLog(_T("Ошибка проверки подписи данных : %s"), m_sLastError);
 
 	if (!sPFSrc.IsEmpty ())
 		CFileMng::DeleteFileA (sPFSrc);
@@ -617,6 +603,7 @@ BOOL CPhpCrypto::EncryptDataB64	(const CString& sB64DataSrc, const CString& sArr
 {
 	sB64DataEncRet = "";
 	CString sPFSrc, sPFEnc;
+	ICPCryptoImpl cpImpl;
 	try {
 		CString sDirTemp = CFileMng::GetDirTemp ();
 		if (sDirTemp.IsEmpty() || !CFileMng::IsDirExist (sDirTemp))
@@ -632,22 +619,13 @@ BOOL CPhpCrypto::EncryptDataB64	(const CString& sB64DataSrc, const CString& sArr
 			throw CString ("Can't write data to temp dir: " + sDirTemp);
 
 		CStringArrayEx saIDCerts (sArrIDCerts, ',');
-/*				
-		CString sTemp;
-		for (int i = 0; i < saIDCerts.GetSize (); i++)
-			sTemp += (CString)"\nCert : " + saIDCerts[i] + "\n";
-		sB64DataEncRet = sTemp;
-		return TRUE;
-*/
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Шифрование данных для сертификатов : %s"), sArrIDCerts);
 
-		if (CCPC_NoError != cpImpl.EncryptFile (sPFSrc, sPFEnc, saIDCerts))
-		{
-			cpImpl.WriteToLog(_T("Ошибка шифрования данных : %s"), cpImpl.GetLastCryptoError ());
+		cpImpl.m_LastErrorCode = cpImpl.EncryptFile (sPFSrc, sPFEnc, saIDCerts);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
 			throw cpImpl.GetLastCryptoError ();
-		}
+		
 		CBinData bnDataEnc;
 		if (!bnDataEnc.fRead (sPFEnc))
 			throw CString ("Can't read encrypt data in temp dir: " + sPFEnc);
@@ -659,13 +637,11 @@ BOOL CPhpCrypto::EncryptDataB64	(const CString& sB64DataSrc, const CString& sArr
 		return TRUE;
 	} 
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"EncryptData error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"EncryptData error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"EncryptData error: Unknown";
-	}
+	{		m_sLastError = (CString)"EncryptData error: Unknown";	}
+			
+	cpImpl.WriteToLog(_T("Ошибка шифрования данных : %s"), m_sLastError);
 
 	if (!sPFSrc.IsEmpty ())
 		CFileMng::DeleteFileA (sPFSrc);
@@ -678,12 +654,17 @@ BOOL CPhpCrypto::EncryptDataB64	(const CString& sB64DataSrc, const CString& sArr
 BOOL CPhpCrypto::EncryptDataB64ByCertContent (const CString& sB64DataSrc, // const CString sIDCertPvt, 
 											  const CString& sArrIDCertsContent, CString& sB64DataEncRet)
 {
+//	ASSERT (FALSE);
 	sB64DataEncRet = "";
 	CString sPFSrc, sPFEnc;
+	ICPCryptoImpl cpImpl;
 
 	CArray<PCCERT_CONTEXT,PCCERT_CONTEXT> arrCertRcpt;
 
 	try {
+		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
+		cpImpl.WriteToLog(_T("Шифрование данных контентом сертификатов"));
+
 		CString sDirTemp = CFileMng::GetDirTemp ();
 		if (sDirTemp.IsEmpty() || !CFileMng::IsDirExist (sDirTemp))
 			throw CString ("Temp Dir not exist!");
@@ -697,48 +678,41 @@ BOOL CPhpCrypto::EncryptDataB64ByCertContent (const CString& sB64DataSrc, // con
 		if (!bnData.fWrite (sPFSrc))
 			throw CString ("Can't write data to temp dir: " + sDirTemp);
 
-		ICPCryptoImpl cpImpl;
-		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
-		cpImpl.WriteToLog(_T("Шифрование данных контентом сертификатов"));
-
 		CArray<PCCERT_CONTEXT,PCCERT_CONTEXT> arrCertRcpt;
 		CStringArrayEx saCertsContent (sArrIDCertsContent, ',');
 		std::list<CBinData> lsBNDataCert;
 		CStringArrayEx saTemp;
-		try {
-			FOR_ALL_CONST_STR (pStrCertContent, saCertsContent)
-			{
-				lsBNDataCert.push_front (CBinData());
-				if (!CBase64Utils::DecodeFromB64 (*pStrCertContent, lsBNDataCert.front()))
-					throw CString ("Certificate content data is not Base64!");
+		FOR_ALL_CONST_STR (pStrCertContent, saCertsContent)
+		{
+			lsBNDataCert.push_front (CBinData());
+			if (!CBase64Utils::DecodeFromB64 (*pStrCertContent, lsBNDataCert.front()))
+				throw CString ("Certificate content data is not Base64!");
+			cpImpl.m_LastErrorCode = cpImpl.CryptDataBlobFromFile ("", NULL, &(lsBNDataCert.front()) );
+			if (CCPC_NoError != cpImpl.m_LastErrorCode)
+				throw cpImpl.GetLastCryptoError ();
 
-				if (CCPC_NoError != cpImpl.CryptDataBlobFromFile ("", NULL, &(lsBNDataCert.front()) ))
-					throw cpImpl.GetLastCryptoError ();
-		// Преобразуем сертификат в описатель
-				PCCERT_CONTEXT pCertContext = ::CertCreateCertificateContext (X509_ASN_ENCODING|PKCS_7_ASN_ENCODING,
-					lsBNDataCert.front().BufUC(), lsBNDataCert.front().Size());
-				
-				if (pCertContext == NULL)
-					throw (CString)"Failed to create the handle of the certificate binary data : " + CStringProc::GetSystemError();
+// Преобразуем сертификат в описатель
+			PCCERT_CONTEXT pCertContext = ::CertCreateCertificateContext (X509_ASN_ENCODING|PKCS_7_ASN_ENCODING,
+				lsBNDataCert.front().BufUC(), lsBNDataCert.front().Size());
+			
+			if (pCertContext == NULL)
+				throw (CString)"Failed to create the handle of the certificate binary data : " + CStringProc::GetSystemError();
 
-				saTemp.Add (cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Subject));
-				arrCertRcpt.Add(pCertContext);
-			}
+			saTemp.Add (cpImpl.CertNameBlob2Str(&pCertContext->pCertInfo->Subject));
+			arrCertRcpt.Add(pCertContext);
+		}
 //		sB64DataEncRet = saTemp.GetAsString ("\r\n");
 //		return TRUE;
 
-			if (CCPC_NoError != cpImpl.EncryptFileEx (sPFSrc, sPFEnc, CStringArray (), &arrCertRcpt))
-				throw cpImpl.GetLastCryptoError ();
+		cpImpl.m_LastErrorCode = cpImpl.EncryptFileEx (sPFSrc, sPFEnc, CStringArray (), &arrCertRcpt);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
+			throw cpImpl.GetLastCryptoError ();
 
-			CBinData bnDataEnc;
-			if (!bnDataEnc.fRead (sPFEnc))
-				throw CString ("Can't read encrypt data in temp dir: " + sPFEnc);
-			sB64DataEncRet = CBase64Utils::EncodeToB64 (bnDataEnc);
-		} catch (CString sError)
-		{
-			cpImpl.WriteToLog(_T("Ошибка шифрования данных контентом сертификатов : %s"), sError);
-			throw sError;
-		}
+		CBinData bnDataEnc;
+		if (!bnDataEnc.fRead (sPFEnc))
+			throw CString ("Can't read encrypt data in temp dir: " + sPFEnc);
+		sB64DataEncRet = CBase64Utils::EncodeToB64 (bnDataEnc);
+
 		cpImpl.WriteToLog(_T("Данные успешно зашифрованы контентом сертификатов."));
 
 // SMU: Clean temp files
@@ -748,13 +722,11 @@ BOOL CPhpCrypto::EncryptDataB64ByCertContent (const CString& sB64DataSrc, // con
 		return TRUE;
 	} 
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"EncryptDataB64ByCertContent error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"EncryptDataB64ByCertContent error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"EncryptDataB64ByCertContent error: Unknown";
-	}
+	{		m_sLastError = (CString)"EncryptDataB64ByCertContent error: Unknown";	}
+	
+	cpImpl.WriteToLog(_T("Ошибка шифрования данных контентом сертификатов : %s"), m_sLastError);
 
 	if (!sPFSrc.IsEmpty ())
 		CFileMng::DeleteFileA (sPFSrc);
@@ -768,6 +740,7 @@ BOOL CPhpCrypto::DecryptDataB64	(const CString& sB64DataEnc, CString& sB64DataDe
 {
 	sB64DataDecRet = "";
 	CString sPFEnc, sPFDec;
+	ICPCryptoImpl cpImpl;
 	try {
 		CString sDirTemp = CFileMng::GetDirTemp ();
 		if (sDirTemp.IsEmpty() || !CFileMng::IsDirExist (sDirTemp))
@@ -782,15 +755,12 @@ BOOL CPhpCrypto::DecryptDataB64	(const CString& sB64DataEnc, CString& sB64DataDe
 		if (!bnData.fWrite (sPFEnc))
 			throw CString ("Can't write data to temp dir: " + sDirTemp);
 
-		ICPCryptoImpl cpImpl;
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Расшифровка данных."));
 
-		if (CCPC_NoError != cpImpl.DecryptFile (sPFEnc, sPFDec))
-		{
-			cpImpl.WriteToLog(_T("Ошибка расшифровки данных : %s"), cpImpl.GetLastCryptoError ());
+		cpImpl.m_LastErrorCode = cpImpl.DecryptFile (sPFEnc, sPFDec);
+		if (CCPC_NoError != cpImpl.m_LastErrorCode)
 			throw cpImpl.GetLastCryptoError ();
-		}
 
 		CBinData bnDataDec;
 		if (!bnDataDec.fRead (sPFDec))
@@ -803,13 +773,10 @@ BOOL CPhpCrypto::DecryptDataB64	(const CString& sB64DataEnc, CString& sB64DataDe
 		return TRUE;
 	} 
 	catch (CString sThrow)
-	{
-		m_sLastError = (CString)"DecryptData error: " + sThrow;
-	}
+	{		m_sLastError = (CString)"DecryptData error: " + sThrow;	}
 	catch (...)
-	{
-		m_sLastError = (CString)"DecryptData error: Unknown";
-	}
+	{		m_sLastError = (CString)"DecryptData error: Unknown";	}
+	cpImpl.WriteToLog(_T("Ошибка расшифровки данных : %s"), m_sLastError);
 
 	if (!sPFEnc.IsEmpty ())
 		CFileMng::DeleteFileA (sPFEnc);
