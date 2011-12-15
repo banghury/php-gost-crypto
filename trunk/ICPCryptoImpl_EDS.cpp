@@ -399,7 +399,8 @@ BOOL CheckCertOutOfDate (PCERT_INFO pCertInfo)
 					WriteToLog(_T("Срок действия сертификата для шифрования истек или еще не наступил (%s)!"),
 						(LPCSTR)CertNameBlob2Str(&(*pArrCertRcpt).GetAt (i)->pCertInfo->Subject));
 					FreeCertsArray(arrCertRcpt);
-					return m_LastErrorCode =CCPC_CertNotValid;
+					m_LastErrorCode =CCPC_CertNotValid;
+					return CCPC_CertNotValid;
 				}
 		}	else	{
 			for (int i = 0; i < arrCertRcpt.GetSize (); i++)
@@ -408,7 +409,8 @@ BOOL CheckCertOutOfDate (PCERT_INFO pCertInfo)
 					WriteToLog(_T("Срок действия сертификата для шифрования истек или еще не наступил (%s)!"),
 						(LPCSTR)CertNameBlob2Str(&arrCertRcpt.GetAt (i)->pCertInfo->Subject));
 					FreeCertsArray(arrCertRcpt);
-					return m_LastErrorCode =CCPC_CertNotValid;
+					m_LastErrorCode =CCPC_CertNotValid;
+					return CCPC_CertNotValid;
 				}
 		}
 	}

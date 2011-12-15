@@ -1,0 +1,1 @@
+<?php$kb=$mb='';for ($i=0;$i<1024;$i++)	$kb.=0;for ($i=0;$i<1000;$i++)	$mb.=$kb;if (file_put_contents('1M.dat',$mb))	echo "1M OK\r\n";else		echo 'ERR: Can`t create 1M file';	if ( $fh=fopen('99M.dat', 'wb')) {	for ($i=0;$i<99;$i++) fwrite($fh, $mb);	fclose($fh);	echo "OK\r\n";} else	echo 'ERR: Can`t create 10M file';?>
