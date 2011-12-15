@@ -1,5 +1,5 @@
 // class for converting file to Base64
-
+// dec15_11 MODIF Encode (const CBinData& bnIn, const BOOL bDelNewLine = TRUE)
 // nov16_07 ADD EncodeToB64 (const CString& str, const BOOL bDelNewLine = TRUE)
 // apr28_05 ADD CString GetUnicB64Name (). Don't use for create FILE NAMES!!!!
 // oct20_04 MODUF BOOL	Decode (LPCSTR psInput, CBinData& bnOut)
@@ -18,30 +18,30 @@ public:
 	~CBase64Utils();
 
 	BOOL			Decode (LPCSTR psInput, CBinData& bnOut);
-	CString		Encode (LPCTSTR szEncoding, const int nSize);
-	CString		Encode (const CBinData& bnIn) 
+	CString		Encode (LPCTSTR szEncoding, const int nSize, const BOOL bDelNewLine = FALSE);
+	CString		Encode (const CBinData& bnIn, const BOOL bDelNewLine = FALSE) 
 	{ 
-		return Encode ((LPCTSTR)bnIn.Buf (), bnIn.Size ()); 
+		return Encode ((LPCTSTR)bnIn.Buf (), bnIn.Size (), bDelNewLine); 
 	};
 
 	CString		EncodeTable (LPCTSTR bnEncoding, const int nSize);
 
 	static		CString	GetUnicB64Name (); // Don't use for create FILE NAMES!!!!
-	static		CString	EncodeToB64 (const CString& str, const BOOL bDelNewLine = TRUE)
+	static		CString	EncodeToB64 (const CString& str, const BOOL bDelNewLine = FALSE)
 	{
 		CBase64Utils b64;
-		CString sRet = b64.Encode ((LPCTSTR)str, str.GetLength ()); 
-		if (bDelNewLine)
-			sRet.Replace ("\r\n", "");
+		CString sRet = b64.Encode ((LPCTSTR)str, str.GetLength (), bDelNewLine); 
+//		if (bDelNewLine)
+//			sRet.Replace ("\r\n", "");
 		return sRet;
 	};
 
-	static		CString	EncodeToB64 (const CBinData& bnIn, const BOOL bDelNewLine = TRUE) 
+	static		CString	EncodeToB64 (const CBinData& bnIn, const BOOL bDelNewLine = FALSE) 
 	{ 
 		CBase64Utils b64;
-		CString sRet = b64.Encode ((LPCTSTR)bnIn.Buf (), bnIn.Size ()); 
-		if (bDelNewLine)
-			sRet.Replace ("\r\n", "");
+		CString sRet = b64.Encode ((LPCTSTR)bnIn.Buf (), bnIn.Size (), bDelNewLine); 
+//		if (bDelNewLine)
+//			sRet.Replace ("\r\n", "");
 		return sRet;
 	};
 

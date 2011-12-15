@@ -54,7 +54,7 @@ void	CBase64Utils::BuildBase64Table ()
 //		*(pOutBuf++) = alphabet[(pInCur[2] << 0) & 63];
 	}
 	CBinData bn ((UCHAR*)m_usTableBase64, _USHORT_MAX_* sizeof (USHORT));
-	bn.fWrite ("C:\\table.bin");
+//	bn.fWrite ("C:\\table.bin");
 }
 
 CString		CBase64Utils::EncodeTable (LPCTSTR bnEncoding, const int nSize)
@@ -94,11 +94,11 @@ CString		CBase64Utils::EncodeTable (LPCTSTR bnEncoding, const int nSize)
 
 	CBinData bnDst;
 	ASSERT (Decode (sRet, bnDst) && nSize == bnDst.Size () && 0 == memcmp (bnDst.Buf (), bnEncoding, nSize));
-	bnDst.fWrite ("C:\\bnDst.txt");
+//	bnDst.fWrite ("C:\\bnDst.txt");
 	return sRet;
 }
 
-CString		CBase64Utils::Encode (LPCTSTR bnEncoding, const int nSize)
+CString		CBase64Utils::Encode (LPCTSTR bnEncoding, const int nSize, BOOL bDelNewLine /* = TRUE */)
 {
 //	if (m_bUseTableBase64 || nSize > _USHORT_MAX_*10) 
 //		return EncodeTable (bnEncoding, nSize);
@@ -139,8 +139,11 @@ CString		CBase64Utils::Encode (LPCTSTR bnEncoding, const int nSize)
 			_CONVERT_	pInCur += 3;
 			_CONVERT_	pInCur += 3;
 
-			*(pOutBuf++) = '\r';
-			*(pOutBuf++) = '\n';
+			if (!bDelNewLine)
+			{
+				*(pOutBuf++) = '\r';
+				*(pOutBuf++) = '\n';
+			}
 		}
 		pInEnd += _N_STEP_;
 	}
@@ -156,6 +159,7 @@ CString		CBase64Utils::Encode (LPCTSTR bnEncoding, const int nSize)
 
 	CBinData bnDst;
 	ASSERT (Decode (sRet, bnDst) && nSize == bnDst.Size () && 0 == memcmp (bnDst.Buf (), bnEncoding, nSize));
+//	CStringProc::fWrite ("C:\\PHP5\\temp.txt", sRet);
 
 	return sRet;
 }
