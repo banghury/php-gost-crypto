@@ -588,6 +588,8 @@ ZEND_FUNCTION(gostEncryptBlock)
 */
 ZEND_FUNCTION(gostEncryptFile)
 {
+	RETURN_LONG (FALSE);
+
 	char *cPFSrc = NULL, *cPFDst = NULL, *cIDCerts = NULL;
 	DWORD dwPFSrc = 0, dwPFDst = 0, dwIDCerts = 0;
 

@@ -511,7 +511,7 @@ BOOL CPhpCrypto::SignDataB64 (const CString& sB64Data, const CString& sIDCert, c
 		CBinData bnSign;
 		if (!bnSign.fRead (sPFSign))
 			throw CString ("Can't read sign data in temp dir: " + sPFSign);
-		sB64SignRet = CBase64Utils::EncodeToB64 (bnSign);
+		sB64SignRet = CBase64Utils::EncodeToB64 (bnSign, TRUE);
 
 // SMU: Clean temp files
 		cpImpl.WriteToLog(_T("Данные успешно подписаны сертификатом : %s"), sIDCert);
@@ -629,7 +629,8 @@ BOOL CPhpCrypto::EncryptDataB64	(const CString& sB64DataSrc, const CString& sArr
 		CBinData bnDataEnc;
 		if (!bnDataEnc.fRead (sPFEnc))
 			throw CString ("Can't read encrypt data in temp dir: " + sPFEnc);
-		sB64DataEncRet = CBase64Utils::EncodeToB64 (bnDataEnc);
+//	ASSERT (FALSE);
+		sB64DataEncRet = CBase64Utils::EncodeToB64 (bnDataEnc, TRUE);
 
 // SMU: Clean temp files
 		CFileMng::DeleteFileA (sPFSrc);
@@ -711,7 +712,7 @@ BOOL CPhpCrypto::EncryptDataB64ByCertContent (const CString& sB64DataSrc, // con
 		CBinData bnDataEnc;
 		if (!bnDataEnc.fRead (sPFEnc))
 			throw CString ("Can't read encrypt data in temp dir: " + sPFEnc);
-		sB64DataEncRet = CBase64Utils::EncodeToB64 (bnDataEnc);
+		sB64DataEncRet = CBase64Utils::EncodeToB64 (bnDataEnc, TRUE);
 
 		cpImpl.WriteToLog(_T("Данные успешно зашифрованы контентом сертификатов."));
 
@@ -765,7 +766,7 @@ BOOL CPhpCrypto::DecryptDataB64	(const CString& sB64DataEnc, CString& sB64DataDe
 		CBinData bnDataDec;
 		if (!bnDataDec.fRead (sPFDec))
 			throw CString ("Can't read decrypt data in temp dir: " + sPFDec);
-		sB64DataDecRet = CBase64Utils::EncodeToB64 (bnDataDec);
+		sB64DataDecRet = CBase64Utils::EncodeToB64 (bnDataDec, TRUE);
 
 // SMU: Clean temp files
 		CFileMng::DeleteFileA (sPFEnc);
