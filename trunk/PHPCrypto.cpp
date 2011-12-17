@@ -273,6 +273,33 @@ CString CPhpCrypto::ParseSignInfo (const CString& sSignInfo)
 	return sXmlSignInfo;
 }
 
+CString GetOIDDesc (const CString& sOIDInBrace)
+{
+	CString sOID = CStringProc::GetStrBefore (sOIDInBrace, '=');
+	ASSERT (!sOID.IsEmpty ());
+	if (sOID == "1.3.6.1.4.1.311.21.1")
+		return "Версия центра сертификации: ";
+	if (sOID == "1.3.6.1.5.5.7.1.1")
+		return "Доступ к информации о центрах сертификации: ";
+
+	if (sOID == "2.5.29.14")
+		return "Идентификатор ключа субъекта: ";
+	if (sOID == "2.5.29.15")
+		return "Использование ключа: ";
+	if (sOID == "2.5.29.19")
+		return "Основные ограничения: ";
+	if (sOID == "2.5.29.31")
+		return "Точки распространения списков отзыва (CRL): ";
+	if (sOID == "2.5.29.32")
+		return "Политики сертификата: ";
+	if (sOID == "2.5.29.35")
+		return "Идентификатор ключа центра сертификатов: ";
+	if (sOID == "2.5.29.37")
+		return "Улучшенный ключ: ";
+	
+	return "";
+}
+
 BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCertRet)
 {
 	sXmlCertRet = "<?xml version=\"1.0\" encoding=\"windows-1251\"?>\r\n<Certificate>\r\n";
@@ -282,8 +309,39 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 		cpImpl.m_Log.m_sPFNLog = m_sPFLog;
 		cpImpl.WriteToLog(_T("Парсинг контента сертификата."));
 
+		CString sB64InsideBlock;
+// Read cert as pathfile
+		if (sB64DataCert.GetLength () < MAX_PATH)
+		{
+			if (!CFileMng::IsFileExist (sB64DataCert))
+				throw CString ("File not found: ") + sB64DataCert;
+
+			CBinData bnFile;
+			if (!bnFile.fRead (sB64DataCert))
+				throw CString ("Can't read file: ") + sB64DataCert;
+			
+			if (bnFile.Size () > 2 && *((USHORT*)bnFile.Buf()) == 33328) //start symbols of ASN1 (USHORT)0x3082)
+			{	// ASN1
+				sB64InsideBlock = CBase64Utils::EncodeToB64 (bnFile, TRUE);
+			}
+			else if (bnFile.Find(_T("MII")) == 0)
+			{	// Base64
+				if (!bnFile.CopyDataToString (sB64InsideBlock))
+					throw CString ("Unknown format inside block of file certificate: ") + sB64DataCert;
+			}	
+			else if (bnFile.Find(CERT_IN_BASE64_BEGIN) == 0)
+			{	// ----BEGIN CERTIFICATE------
+				if (!bnFile.CopyDataToString (sB64InsideBlock))
+					throw CString ("Unknown format inside of file certificate: ") + sB64DataCert;
+				sB64InsideBlock = CStringProc::GetStrBtw (sB64InsideBlock, CERT_IN_BASE64_BEGIN, CERT_IN_BASE64_END);
+			}
+			else
+				throw CString ("Unknown format of certificate: ") + sB64DataCert;
+		}	else
+			sB64InsideBlock = CStringProc::GetStrBtw (sB64DataCert, CERT_IN_BASE64_BEGIN, CERT_IN_BASE64_END);
+		
 		CBinData bnDataCert;
-		if (!CBase64Utils::DecodeFromB64 (sB64DataCert, bnDataCert))
+		if (!CBase64Utils::DecodeFromB64 (sB64InsideBlock.IsEmpty () ? sB64DataCert : sB64InsideBlock, bnDataCert))
 			throw CString ("Certificate content data is not Base64!");
 
 		BOOL bTypeIsASN = bnDataCert.Find (_T("MII")) == 0;
@@ -411,7 +469,7 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 			CString sCertExt;
 			for (int i = 0; i < ExtCount; i++) // перебор все расширений сертификата
 			{
-				 // Get length needed to buffer;
+/*				 // Get length needed to buffer;
 				if (!CryptDecodeObject(
 						pCertContext->dwCertEncodingType,
 						pCertContext->pCertInfo->rgExtension[i].pszObjId,
@@ -432,14 +490,37 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 						bnExt.Buf (),
 						&cbDecoded))
 					continue;
-				
-				CString sTemp;
-				sTemp.Format ("%s", pCertContext->pCertInfo->rgExtension[i].pszObjId);
-				sCertExt += sTemp;
-				bnExt.Encode2Hex (sTemp); 
-				if (sTemp != "")
-					sCertExt += (CString)'=' + sTemp;
-				sCertExt += " ";
+*/
+				DWORD dwFormatSize;
+				if (!CryptFormatObject(
+						X509_ASN_ENCODING, //pCertContext->dwCertEncodingType,
+						0, //__in     DWORD dwFormatType,
+						0, //__in     DWORD dwFormatStrType,
+						NULL, //__in     void *pFormatStruct,
+						pCertContext->pCertInfo->rgExtension[i].pszObjId, //__in     LPCSTR lpszStructType,
+						pCertContext->pCertInfo->rgExtension[i].Value.pbData, //__in     const BYTE *pbEncoded,
+						pCertContext->pCertInfo->rgExtension[i].Value.cbData, //__in     DWORD cbEncoded,
+						NULL, //__out    void *pbFormat,
+						&dwFormatSize)) //__inout  DWORD *pcbFormat
+					continue;
+
+				CBinData bnFormat (dwFormatSize);
+				if (!CryptFormatObject(
+						X509_ASN_ENCODING, //pCertContext->dwCertEncodingType,
+						0, //__in     DWORD dwFormatType,
+						0, //__in     DWORD dwFormatStrType,
+						NULL, //__in     void *pFormatStruct,
+						pCertContext->pCertInfo->rgExtension[i].pszObjId, //__in     LPCSTR lpszStructType,
+						pCertContext->pCertInfo->rgExtension[i].Value.pbData, //__in     const BYTE *pbEncoded,
+						pCertContext->pCertInfo->rgExtension[i].Value.cbData, //__in     DWORD cbEncoded,
+						bnFormat.Buf(), //__out    void *pbFormat,
+						&dwFormatSize)) //__inout  DWORD *pcbFormat
+					continue;
+					
+				LPCWSTR lpw = (LPCWSTR)bnFormat.Buf();
+				CString sOID, sDescription (lpw);
+				sOID.Format ("%s=", pCertContext->pCertInfo->rgExtension[i].pszObjId);
+				sCertExt += sOID + GetOIDDesc (sOID) + sDescription + "\r\n";
 			}
 			sCertExt.TrimRight ();
 			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_EXTENSION, sCertExt);

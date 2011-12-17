@@ -41,6 +41,9 @@ class ICPCrypto {};
 #define STR_TAG_SUBJECT					_T("Subject")
 #define STR_TAG_EXTENSION				_T("Extension")
 
+#define CERT_IN_BASE64_BEGIN	_T("-----BEGIN CERTIFICATE-----")
+#define CERT_IN_BASE64_END		_T("-----END CERTIFICATE-----")
+
 class CPhpCrypto
 {
 protected:

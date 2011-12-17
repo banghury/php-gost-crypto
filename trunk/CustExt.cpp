@@ -239,7 +239,8 @@ ZEND_FUNCTION(gostParseCertificate)
 
 // extension
 			CString sExtValue = CStringProc::GetTagValue (sXmlCert, STR_TAG_EXTENSION);
-			CStringArrayEx saExtension (sExtValue, ' ');
+			CStringArrayEx saExtension;
+			saExtension.FillFromString (sExtValue, "\r\n");
 			MAKE_STD_ZVAL (sub_array_ext);
 			array_init (sub_array_ext);
 			FOR_ALL_CONST_STR (pStrExt, saExtension)
@@ -440,22 +441,78 @@ gostVerifyBlock  ( string $sB64Data, string $ sB64Sign = "")
 <OID>1.2.643.2.2.34.6 1.3.6.1.5.5.7.3.4 1.3.6.1.5.5.7.3.2 1.2.643.3.130.2.3.4.1 1.2.643.3.130.2.3.5.1 1.2.643.3.130.2.3.3.1 1.2.643.3.131.1067.0.3.3.1</OID>
 </Sign>
 */
+void CreateArraySignInfo (const CString& sSignInfoXml, zval* &return_value)
+{
+// Create array
+// <Sign>
+// <Subject>OID.1.2.643.3.131.1.1=7729633131, E=ee@garant.ru, C=RU, S=77 Москва, L=г. Москва, O=ООО Электронный экспресс, OU=0, CN=Максимов Сергей Вадимович, T=Специалист технической поддержки отдела №6</Subject>
+// <DateTimeSign>09.11.2011 16:36:05</DateTimeSign>
+// <Thumb>29d95ebe67a0bcbdc0f80e25f402e1be6114520b</Thumb>
+// <OID>1.3.6.1.5.5.7.3.4 1.3.6.1.5.5.7.3.2 1.2.643.3.131.1000.0.2</OID>
+// </Sign>
+	zval* sub_array_sign;
+	if (array_init(return_value) == FAILURE)
+		throw CString ("Array error init.");
+	
+	CStringArrayEx saSignInfo;
+	saSignInfo.FillFromString (sSignInfoXml, "<Sign>");
+	int nArrNum = 0;
+	FOR_ALL_CONST_STR (pStrSign, saSignInfo)
+	{
+// Subject
+		CString sSubjValue = CStringProc::GetTagValue (*pStrSign, STR_TAG_SUBJECT);
+		if (sSubjValue.IsEmpty ())
+			continue; // for first string <?xml...
+		MAKE_STD_ZVAL (sub_array_sign);
+		array_init (sub_array_sign);
+		CString sSubject = STR_TAG_SUBJECT;
+		add_assoc_string (sub_array_sign, (LPSTR)(LPCSTR)sSubject, (LPSTR)(LPCSTR)sSubjValue, 1);
+
+// Thumb
+		CString sThumb = STR_TAG_THUMB;
+		CString sThumbValue = CStringProc::GetTagValue (*pStrSign, STR_TAG_THUMB);
+		add_assoc_string (sub_array_sign, (LPSTR)(LPCSTR)sThumb, (LPSTR)(LPCSTR)sThumbValue, 1);
+
+// OID
+		CString sOID = STR_TAG_OID;
+		CString sOIDValue = CStringProc::GetTagValue (*pStrSign, STR_TAG_OID);
+		add_assoc_string (sub_array_sign, (LPSTR)(LPCSTR)sOID, (LPSTR)(LPCSTR)sOIDValue, 1);
+
+// DateTimeSign
+		CString sDTSign = STR_TAG_DT_SIGN;
+		CString sDTSignValue = CStringProc::GetTagValue (*pStrSign, STR_TAG_DT_SIGN);
+		add_assoc_string (sub_array_sign, (LPSTR)(LPCSTR)sDTSign, (LPSTR)(LPCSTR)sDTSignValue, 1);
+//			DWORD nTimeSign = 0;
+//			if (!sDTSignValue.IsEmpty() && 1 == sscanf ((LPCSTR)sDTSignValue, "%u", &nTimeSign))
+//				add_assoc_long (sub_array_sign, (LPSTR)(LPCSTR)sDTSign, nTimeSign, 1);
+		
+		CString sSignName = _T("Sign");
+//			sSignName += sThumbValue;
+//			add_assoc_zval (return_value, (LPSTR)(LPCSTR)sSignName, sub_array_sign);
+		add_index_zval (return_value, nArrNum++, sub_array_sign);
+	}
+}
+
 ZEND_FUNCTION(gostVerifyBlock)
 {
 	char *cB64Data = NULL, *cB64Sign = NULL;
 	DWORD dwB64Data = 0, dwB64Sign = 0;
+	long bReturnAsXml = FALSE;
+	g_sLastError.Empty ();
 
 	try {
-		if (ZEND_NUM_ARGS() == 2)
+		if (ZEND_NUM_ARGS() == 3)
+		{
+			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssl",
+					&cB64Data, &dwB64Data,
+					&cB64Sign, &dwB64Sign,
+					&bReturnAsXml) == FAILURE)
+				throw (CString)"Bad param in call gostVerifyBlock.";
+		} else if (ZEND_NUM_ARGS() == 2)
 		{
 			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss",
 					&cB64Data, &dwB64Data,
 					&cB64Sign, &dwB64Sign) == FAILURE)
-				throw (CString)"Bad param in call gostVerifyBlock.";
-		} else if (ZEND_NUM_ARGS() == 1)
-		{
-			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s",
-					&cB64Data, &dwB64Data) == FAILURE)
 				throw (CString)"Bad param in call gostVerifyBlock.";
 		} else 
 			throw (CString)"Bad number of param in call gostVerifyBlock.";
@@ -463,25 +520,31 @@ ZEND_FUNCTION(gostVerifyBlock)
 		CString sB64Data, sB64Sign, sSignInfo;
 		if (!InitPhpString (cB64Data, dwB64Data, sB64Data))
 			throw (CString)"gostVerifyBlock not read param sB64Data.";
-		if (ZEND_NUM_ARGS() == 2)
-			if (!InitPhpString (cB64Sign, dwB64Sign, sB64Sign))
-				throw (CString)"gostVerifyBlock not read param sB64Sign.";
+		if (!InitPhpString (cB64Sign, dwB64Sign, sB64Sign))
+			throw (CString)"gostVerifyBlock not read param sB64Sign.";
 
 		CPhpCrypto phpCrypto(g_sPFLog);
+		CString sSignInfoXml;
 		if (TRUE == phpCrypto.VerifyDataB64(sB64Data, sB64Sign, sSignInfo))
 		{
-			sSignInfo = phpCrypto.ParseSignInfo (sSignInfo);
-			RETURN_STRING ((LPTSTR)(LPCTSTR)sSignInfo, true);
+			sSignInfoXml = phpCrypto.ParseSignInfo (sSignInfo);
+			if (bReturnAsXml)
+				RETURN_STRING ((LPTSTR)(LPCTSTR)sSignInfo, true);
 		}	else	{
 			throw (CString)"gostVerifyBlock : " + phpCrypto.GetLastError ();
 		}
-
+		if (!bReturnAsXml)
+			CreateArraySignInfo (sSignInfoXml, return_value);
 	} catch (CString sThrow)	
 	{	g_sLastError = sThrow;	}
 	catch (...)	
 	{	g_sLastError = "gostVerifyBlock : Unkown error";	}
 	
-	RETURN_LONG (FALSE);
+	if (!g_sLastError.IsEmpty ())
+		RETURN_LONG (FALSE);
+	
+	if (bReturnAsXml)
+		RETURN_LONG (FALSE);
 }
 
 /* 
@@ -492,48 +555,65 @@ gostVerifyFile ( string $sPFSrc, string $ sPFSign = "")
 // В случае неудачи - bool false. Причину ошибки можно узнать вызвав функцию gostGetLastError()
 //  В случае успеха - string содержащая значение ключевых параметров сертификата подписи, в аналогичном формате, описанному в функции gostVerifyBlock.
 */
+
 ZEND_FUNCTION(gostVerifyFile)
 {
 	char *cPFSrc = NULL, *cPFSign = NULL;
 	DWORD dwPFSrc = 0, dwPFSign = 0;
+	long bReturnAsXml = FALSE;
+	g_sLastError.Empty ();
 
 	try {
-		if (ZEND_NUM_ARGS() == 2)
+		if (ZEND_NUM_ARGS() == 3)
+		{
+			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssl",
+					&cPFSrc, &dwPFSrc,
+					&cPFSign, &dwPFSign,
+					&bReturnAsXml) == FAILURE)
+				throw (CString)"Bad param in call gostVerifyFile!";
+		} 
+		else if (ZEND_NUM_ARGS() == 2)
 		{
 			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss",
 					&cPFSrc, &dwPFSrc,
 					&cPFSign, &dwPFSign) == FAILURE)
 				throw (CString)"Bad param in call gostVerifyFile!";
-		} else if (ZEND_NUM_ARGS() == 1)
-		{
-			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s",
-					&cPFSrc, &dwPFSrc) == FAILURE)
-				throw (CString)"Bad param in call gostVerifyFile!";
-		} else 
-			throw (CString)"Bad number of param in call gostVerifyFile!";
+		}
+//		else if (ZEND_NUM_ARGS() == 1)
+//		{
+//			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s",
+//					&cPFSrc, &dwPFSrc) == FAILURE)
+//				throw (CString)"Bad param in call gostVerifyFile!";
+//		} else 
+//			throw (CString)"Bad number of param in call gostVerifyFile!";
 	
 		CString sPFSrc, sPFSign, sSignInfo;
 		if (!InitPhpString (cPFSrc, dwPFSrc, sPFSrc))
 			throw (CString)"gostVerifyFile not read param sPFSrc.";
-		if (ZEND_NUM_ARGS() == 2)
-			if (!InitPhpString (cPFSign, dwPFSign, sPFSign))
-				throw (CString)"gostVerifyFile not read param sPFSign.";
+		if (!InitPhpString (cPFSign, dwPFSign, sPFSign))
+			throw (CString)"gostVerifyFile not read param sPFSign.";
 
+		CString sSignInfoXml;
 		CPhpCrypto phpCrypto(g_sPFLog);
 		if (TRUE == phpCrypto.VerifyFile (sPFSrc, sPFSign, sSignInfo))
 		{
-			sSignInfo = phpCrypto.ParseSignInfo (sSignInfo);
-			RETURN_STRING ((LPTSTR)(LPCTSTR)sSignInfo, true);
+			sSignInfoXml = phpCrypto.ParseSignInfo (sSignInfo);
+			if (bReturnAsXml)
+				RETURN_STRING ((LPTSTR)(LPCTSTR)sSignInfoXml, true);
 		}	else	{
 			throw (CString)"gostVerifyFile : " + phpCrypto.GetLastError ();
 		}
-
+		CreateArraySignInfo (sSignInfoXml, return_value);
 	} catch (CString sThrow)	
 	{	g_sLastError = sThrow;	}
 	catch (...)	
 	{	g_sLastError = "gostVerifyFile : Unkown error";	}
-	
-	RETURN_LONG (FALSE);
+
+	if (!g_sLastError.IsEmpty ())
+		RETURN_LONG (FALSE);
+
+	if (bReturnAsXml)
+		RETURN_LONG (FALSE);
 }
 
 /* 
