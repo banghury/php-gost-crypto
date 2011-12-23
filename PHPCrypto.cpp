@@ -275,7 +275,7 @@ CString CPhpCrypto::ParseSignInfo (const CString& sSignInfo)
 
 CString GetOIDDesc (const CString& sOIDInBrace)
 {
-	CString sOID = CStringProc::GetStrBefore (sOIDInBrace, '=');
+	CString sOID = CStringProc::GetStrBefore (sOIDInBrace, ':');
 	ASSERT (!sOID.IsEmpty ());
 	if (sOID == "1.3.6.1.4.1.311.21.1")
 		return "Версия центра сертификации: ";
@@ -349,8 +349,8 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 		if (CCPC_NoError != cpImpl.m_LastErrorCode)
 			throw cpImpl.GetLastCryptoError ();
 
-		CStringProc::SetStrForTag (sXmlCertRet, "Type", bTypeIsASN ? "ASN" : "DER");
-		sXmlCertRet += "\r\n";
+//		CStringProc::SetStrForTag (sXmlCertRet, "Type", bTypeIsASN ? "ASN" : "DER");
+//		sXmlCertRet += "\r\n";
 /*
 		DWORD                       dwVersion;
 		CRYPT_ALGORITHM_IDENTIFIER  SignatureAlgorithm;
@@ -518,9 +518,12 @@ BOOL CPhpCrypto::ParseCertificate (const CString& sB64DataCert, CString& sXmlCer
 					continue;
 					
 				LPCWSTR lpw = (LPCWSTR)bnFormat.Buf();
-				CString sOID, sDescription (lpw);
-				sOID.Format ("%s=", pCertContext->pCertInfo->rgExtension[i].pszObjId);
-				sCertExt += sOID + GetOIDDesc (sOID) + sDescription + "\r\n";
+				CString sOID, sDescription (lpw), sFlags;
+				sOID.Format ("%s:", pCertContext->pCertInfo->rgExtension[i].pszObjId);
+				sFlags.Format ((pCertContext->pCertInfo->rgExtension[i].fCritical ?
+					" Флаги=1(Критический), Длина=%x; " :
+					" Флаги=0, Длина=%x; "), pCertContext->pCertInfo->rgExtension[i].Value.cbData);
+				sCertExt += sOID + sFlags + GetOIDDesc (sOID) + sDescription + "\r\n";
 			}
 			sCertExt.TrimRight ();
 			CStringProc::SetStrForTag (sXmlCertRet, STR_TAG_EXTENSION, sCertExt);
