@@ -166,10 +166,18 @@ ZEND_FUNCTION(gostParseCertificate)
 				throw (CString)"Bad param in call gostParseCertificate.";
 		}	else 
 			throw (CString)"Bad number param in call gostParseCertificate.";
-	
+
 		CString sB64Data, sXmlCert;
-		if (!InitPhpString (cB64Data, dwB64Data, sB64Data))
-			throw (CString)"gostParseCertificate not read param sB64CertContent.";
+
+// check binary string
+		if (dwB64Data > 2 && *((USHORT*)cB64Data) == 33328)
+		{
+			CBinData bnASN((UCHAR*)cB64Data, dwB64Data);
+			sB64Data = CBase64Utils::EncodeToB64 (bnASN, TRUE);
+		}	else	{
+			if (!InitPhpString (cB64Data, dwB64Data, sB64Data))
+				throw (CString)"gostParseCertificate not read param sB64CertContent.";
+		}
 
 		CPhpCrypto phpCrypto(g_sPFLog);
 		if (TRUE == phpCrypto.ParseCertificate (sB64Data, sXmlCert))
@@ -245,8 +253,8 @@ ZEND_FUNCTION(gostParseCertificate)
 			array_init (sub_array_ext);
 			FOR_ALL_CONST_STR (pStrExt, saExtension)
 			{
-				CString sExtField = CStringProc::GetStrBefore (*pStrExt, '=');
-				CString sExtValue = CStringProc::GetStrAfter (*pStrExt, '=');
+				CString sExtField = CStringProc::GetStrBefore (*pStrExt, ':');
+				CString sExtValue = CStringProc::GetStrAfter (*pStrExt, ':');
 				if (!sExtValue.IsEmpty ())
 					add_assoc_string (sub_array_ext, (LPSTR)(LPCSTR)sExtField, (LPSTR)(LPCSTR)sExtValue, 1);
 			}
